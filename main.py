@@ -14,21 +14,24 @@ import sys
 import time
 import pickle
 
-import dgl
-import numpy as np
-import torch
-from tqdm import tqdm
-import random
-sys.path.append("..")
-from rgcn import utils
-from rgcn.utils import build_sub_graph
-from src.rrgcn import RecurrentRGCN
-from src.hyperparameter_range import hp_range
-import torch.nn.modules.rnn
-from collections import defaultdict
-from rgcn.knowledge_graph import _read_triplets_as_list
-# os.environ['KMP_DUPLICATE_LIB_OK']='True'
+# import dgl
+# import numpy as np
+# import torch
+# from tqdm import tqdm
+# import random
+# sys.path.append("..")
+# from rgcn import utils
+# from rgcn.utils import build_sub_graph
+# from src.rrgcn import RecurrentRGCN
+# from src.hyperparameter_range import hp_range
+# import torch.nn.modules.rnn
+# from collections import defaultdict
+# from rgcn.knowledge_graph import _read_triplets_as_list
+# # os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
+from clearml import Task, StorageManager, Dataset
+
+# Task.add_requirements("dgl-cu111")
 
 def test(model, history_list, test_list, num_rels, num_nodes, use_cuda, all_ans_list, all_ans_r_list, model_name, static_graph, mode):
     """
@@ -297,6 +300,7 @@ def run_experiment(args, n_hidden=None, n_layers=None, dropout=None, n_bases=Non
 
 
 if __name__ == '__main__':
+
     parser = argparse.ArgumentParser(description='REGCN')
 
     parser.add_argument("--gpu", type=int, default=-1,
@@ -399,6 +403,29 @@ if __name__ == '__main__':
                         help="stat to use")
     parser.add_argument("--num-k", type=int, default=500,
                         help="number of triples generated")
+
+    #Clearml Stuff
+    remote_path = "s3://experiment-logging"
+    task = Task.init(project_name='re-gcn', task_name='re-gcn',
+                    output_uri=os.path.join(remote_path, "storage"))
+    task.set_base_docker("nvcr.io/nvidia/pytorch:20.08-py3")
+    # task.set_base_docker("nvidia/cuda:11.4.0-cudnn8-devel-ubuntu20.04")
+    task.execute_remotely(queue_name="compute", exit_process=True)
+
+    import dgl
+    import numpy as np
+    import torch
+    from tqdm import tqdm
+    import random
+    sys.path.append("..")
+    from rgcn import utils
+    from rgcn.utils import build_sub_graph
+    from src.rrgcn import RecurrentRGCN
+    from src.hyperparameter_range import hp_range
+    import torch.nn.modules.rnn
+    from collections import defaultdict
+    from rgcn.knowledge_graph import _read_triplets_as_list
+    # os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
 
     args = parser.parse_args()
