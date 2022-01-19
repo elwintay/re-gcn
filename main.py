@@ -144,15 +144,17 @@ def run_experiment(args, n_hidden=None, n_layers=None, dropout=None, n_bases=Non
         .format(args.dataset, args.encoder, args.decoder, args.n_layers, args.dilate_len, args.train_history_len, args.weight, args.discount, args.angle,
                 args.dropout, args.input_dropout, args.hidden_dropout, args.feat_dropout, args.gpu)
     # model_state_file = '../models/' + model_name
-    model_state_file = 'models/' + model_name
+    # model_state_file = 'models/' + model_name
+    model_state_file = model_name
     print("Sanity Check: stat name : {}".format(model_state_file))
     print("Sanity Check: Is cuda available ? {}".format(torch.cuda.is_available()))
 
     use_cuda = args.gpu >= 0 and torch.cuda.is_available()
 
     if args.add_static_graph:
-        # static_triples = np.array(_read_triplets_as_list("../data/" + args.dataset + "/e-w-graph.txt", {}, {}, load_time=False))
-        static_triples = np.array(_read_triplets_as_list("data/" + args.dataset + "/e-w-graph.txt", {}, {}, load_time=False))
+        # static_triples = np.array(_read_triplets_as_list("data/" + args.dataset + "/e-w-graph.txt", {}, {}, load_time=False))
+        ew_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="e-w-graph.txt").get_local_copy(),"e-w-graph.txt")
+        static_triples = np.array(_read_triplets_as_list(ew_path, {}, {}, load_time=False))
         num_static_rels = len(np.unique(static_triples[:, 1]))
         num_words = len(np.unique(static_triples[:, 2]))
         static_triples[:, 2] = static_triples[:, 2] + num_nodes 
@@ -296,6 +298,9 @@ def run_experiment(args, n_hidden=None, n_layers=None, dropout=None, n_bases=Non
                                                             model_state_file, 
                                                             static_graph, 
                                                             mode="test")
+    
+    StorageManager.upload_file(model_state_file, os.path.join("s3://experiment-logging/storage",model_state_file))
+
     return mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r
 
 
@@ -367,8 +372,8 @@ if __name__ == '__main__':
                         help="do relation prediction")
 
     # configuration for stat training
-    parser.add_argument("--n-epochs", type=int, default=500,
-                        help="number of minimum training epochs on each time step")
+    parser.add_argument("--n-epochs", type=int, default=10,
+                        help="number of minimum training epochs on each time step") #default: 500
     parser.add_argument("--lr", type=float, default=0.001,
                         help="learning rate")
     parser.add_argument("--grad-norm", type=float, default=1.0,
@@ -404,7 +409,10 @@ if __name__ == '__main__':
     parser.add_argument("--num-k", type=int, default=500,
                         help="number of triples generated")
 
+    args = parser.parse_args()
+    
     #Clearml Stuff
+    Task.add_requirements("-rrequirements.txt")
     remote_path = "s3://experiment-logging"
     task = Task.init(project_name='re-gcn', task_name='re-gcn',
                     output_uri=os.path.join(remote_path, "storage"))
@@ -427,9 +435,6 @@ if __name__ == '__main__':
     from rgcn.knowledge_graph import _read_triplets_as_list
     # os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
-
-    args = parser.parse_args()
-    print(args)
     if args.grid_search:
         out_log = '{}.{}.gs'.format(args.dataset, args.encoder+"-"+args.decoder)
         o_f = open(out_log, 'w')

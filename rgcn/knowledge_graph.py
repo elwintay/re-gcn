@@ -17,6 +17,7 @@ import rdflib as rdf
 import scipy.sparse as sp
 from dgl.data.utils import download, extract_archive, get_download_dir, _get_dgl_url
 import sys
+from clearml import StorageManager, Dataset, Task
 
 np.random.seed(123)
 
@@ -187,11 +188,17 @@ class RGCNLinkDataset(object):
 
 
     def load(self, load_time=True):
-        entity_path = os.path.join(self.dir, 'entity2id.txt')
-        relation_path = os.path.join(self.dir, 'relation2id.txt')
-        train_path = os.path.join(self.dir, 'train.txt')
-        valid_path = os.path.join(self.dir, 'valid.txt')
-        test_path = os.path.join(self.dir, 'test.txt')
+        entity_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="entity2id.txt").get_local_copy(),"entity2id.txt")
+        relation_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="relation2id.txt").get_local_copy(),"relation2id.txt")
+        train_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="train.txt").get_local_copy(),"train.txt")
+        valid_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="valid.txt").get_local_copy(),"valid.txt")
+        test_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="test.txt").get_local_copy(),"test.txt")
+        print(entity_path)
+        # entity_path = os.path.join(self.dir, 'entity2id.txt')
+        # relation_path = os.path.join(self.dir, 'relation2id.txt')
+        # train_path = os.path.join(self.dir, 'train.txt')
+        # valid_path = os.path.join(self.dir, 'valid.txt')
+        # test_path = os.path.join(self.dir, 'test.txt')
         entity_dict = _read_dictionary(entity_path)
         relation_dict = _read_dictionary(relation_path)
         self.train = np.array(_read_triplets_as_list(train_path, entity_dict, relation_dict, load_time))
