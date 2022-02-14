@@ -13,6 +13,7 @@ import os
 import sys
 import time
 import pickle
+import copy
 
 # import dgl
 # import numpy as np
@@ -55,8 +56,12 @@ def test(model, history_list, test_list, num_rels, num_nodes, use_cuda, all_ans_
     if mode == "test":
         # test mode: load parameter form file
         if use_cuda:
+            # model_path = StorageManager.get_local_copy(remote_url=os.path.join("s3://experiment-logging/storage",model_name))
+            # checkpoint = torch.load(model_path, map_location=torch.device(args.gpu))
             checkpoint = torch.load(model_name, map_location=torch.device(args.gpu))
         else:
+            # model_path = StorageManager.get_local_copy(remote_url=os.path.join("s3://experiment-logging/storage",model_name))
+            # checkpoint = torch.load(model_path, map_location=torch.device('cpu'))
             checkpoint = torch.load(model_name, map_location=torch.device('cpu'))
         print("Load Model name: {}. Using best epoch : {}".format(model_name, checkpoint['epoch']))  # use best stat checkpoint
         print("\n"+"-"*10+"start testing"+"-"*10+"\n")
@@ -65,6 +70,7 @@ def test(model, history_list, test_list, num_rels, num_nodes, use_cuda, all_ans_
     model.eval()
     # do not have inverse relation in test input
     input_list = [snap for snap in history_list[-args.test_history_len:]] #how much history you are looking at for your original kg
+    output_list = copy.deepcopy(input_list)
 
     for time_idx, test_snap in enumerate(tqdm(test_list)):
         history_glist = [build_sub_graph(num_nodes, num_rels, g, use_cuda, args.gpu) for g in input_list]
@@ -73,7 +79,7 @@ def test(model, history_list, test_list, num_rels, num_nodes, use_cuda, all_ans_
         test_triples, final_score, final_r_score = model.predict(history_glist, num_rels, static_graph, test_triples_input, use_cuda)
 
         mrr_filter_snap_r, mrr_snap_r, rank_raw_r, rank_filter_r = utils.get_total_rank(test_triples, final_r_score, all_ans_r_list[time_idx], eval_bz=1000, rel_predict=1)
-        mrr_filter_snap, mrr_snap, rank_raw, rank_filter = utils.get_total_rank(test_triples, final_score, all_ans_list[time_idx], eval_bz=1000, rel_predict=0)
+        mrr_filter_snap, mrr_snap, rank_raw, rank_filter = utils.get_total_rank(test_triples, final_score, all_ans_list[time_idx], eval_bz=100, rel_predict=0) #eval_bz=1000
 
         # used to global statistic
         ranks_raw.append(rank_raw)
@@ -94,24 +100,21 @@ def test(model, history_list, test_list, num_rels, num_nodes, use_cuda, all_ans_
                 predicted_snap = utils.construct_snap(test_triples, num_nodes, num_rels, final_score, args.topk)
             else:
                 predicted_snap = utils.construct_snap_r(test_triples, num_nodes, num_rels, final_r_score, args.topk)
+            print(len(test_triples))
             print(predicted_snap.shape)
-            print(test_triples.shape)
             if len(predicted_snap):
-                input_list.pop(0)
-                input_list.append(predicted_snap)
+                output_list.pop(0)
+                output_list.append(predicted_snap)
         else:
-            input_list.pop(0)
-            input_list.append(test_snap)
+            output_list.pop(0)
+            output_list.append(test_snap)
         idx += 1
-
-        # print(len(input_list))
-        # print(input_list)
 
     mrr_raw = utils.stat_ranks(ranks_raw, "raw_ent")
     mrr_filter = utils.stat_ranks(ranks_filter, "filter_ent")
     mrr_raw_r = utils.stat_ranks(ranks_raw_r, "raw_rel")
     mrr_filter_r = utils.stat_ranks(ranks_filter_r, "filter_rel")
-    return mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r
+    return mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r, output_list
 
 
 def run_experiment(args, n_hidden=None, n_layers=None, dropout=None, n_bases=None):
@@ -153,7 +156,7 @@ def run_experiment(args, n_hidden=None, n_layers=None, dropout=None, n_bases=Non
 
     if args.add_static_graph:
         # static_triples = np.array(_read_triplets_as_list("data/" + args.dataset + "/e-w-graph.txt", {}, {}, load_time=False))
-        ew_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="e-w-graph.txt").get_local_copy(),"e-w-graph.txt")
+        ew_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt_ops", dataset_name="e-w-graph.txt").get_local_copy(),"e-w-graph.txt")
         static_triples = np.array(_read_triplets_as_list(ew_path, {}, {}, load_time=False))
         num_static_rels = len(np.unique(static_triples[:, 1]))
         num_words = len(np.unique(static_triples[:, 2]))
@@ -205,19 +208,33 @@ def run_experiment(args, n_hidden=None, n_layers=None, dropout=None, n_bases=Non
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
 
     if args.test and os.path.exists(model_state_file):
-        mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r = test(model, 
-                                                            train_list+valid_list, 
-                                                            test_list, 
-                                                            num_rels, 
-                                                            num_nodes, 
-                                                            use_cuda, 
-                                                            all_ans_list_test, 
-                                                            all_ans_list_r_test, 
-                                                            model_state_file, 
-                                                            static_graph, 
-                                                            "test")
+        mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r, output_list = test(model, 
+                                                                        train_list+valid_list, 
+                                                                        test_list, 
+                                                                        num_rels, 
+                                                                        num_nodes, 
+                                                                        use_cuda, 
+                                                                        all_ans_list_test, 
+                                                                        all_ans_list_r_test, 
+                                                                        model_state_file, 
+                                                                        static_graph, 
+                                                                        "test")
     elif args.test and not os.path.exists(model_state_file):
         print("--------------{} not exist, Change mode to train and generate stat for testing----------------\n".format(model_state_file))
+        remote_url = "s3://experiment-logging/storage/re-gcn/re-gcn.071db94e690e439793f0afdf004c0792/models/GDELT_OPS-uvrgcn-convtranse-ly2-dilate1-his8-weight:0.5-discount:1-angle:10-dp0.2|0.2|0.2|0.2-gpu0"
+        model_path = StorageManager.get_local_copy(remote_url=remote_url)
+        mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r, output_list = test(model, 
+                                                                        train_list+valid_list, 
+                                                                        test_list, 
+                                                                        num_rels, 
+                                                                        num_nodes, 
+                                                                        use_cuda, 
+                                                                        all_ans_list_test, 
+                                                                        all_ans_list_r_test, 
+                                                                        model_path, 
+                                                                        static_graph, 
+                                                                        "test")
+
     else:
         print("----------------------------------------start training----------------------------------------\n")
         best_mrr = 0
@@ -258,50 +275,58 @@ def run_experiment(args, n_hidden=None, n_layers=None, dropout=None, n_bases=Non
 
             print("Epoch {:04d} | Ave Loss: {:.4f} | entity-relation-static:{:.4f}-{:.4f}-{:.4f} Best MRR {:.4f} | Model {} "
                   .format(epoch, np.mean(losses), np.mean(losses_e), np.mean(losses_r), np.mean(losses_static), best_mrr, model_name))
-
+            logger.report_scalar(title='Training Loss', series='series', value=np.mean(losses), iteration=epoch)
+            
             # validation
-            if epoch and epoch % args.evaluate_every == 0:
-                mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r = test(model, 
-                                                                    train_list, 
-                                                                    valid_list, 
-                                                                    num_rels, 
-                                                                    num_nodes, 
-                                                                    use_cuda, 
-                                                                    all_ans_list_valid, 
-                                                                    all_ans_list_r_valid, 
-                                                                    model_state_file, 
-                                                                    static_graph, 
-                                                                    mode="train")
-                
+            if epoch>=0 and epoch % args.evaluate_every == 0:
+                mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r, output_list = test(model, 
+                                                                                train_list, 
+                                                                                valid_list, 
+                                                                                num_rels, 
+                                                                                num_nodes, 
+                                                                                use_cuda, 
+                                                                                all_ans_list_valid, 
+                                                                                all_ans_list_r_valid, 
+                                                                                model_state_file, 
+                                                                                static_graph, 
+                                                                                mode="train")
+                print(mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r)
+                logger.report_scalar(title='Validation mrr_filter_r', series='series', value=mrr_filter_r, iteration=epoch)
+                logger.report_scalar(title='Validation mrr_filter', series='series', value=mrr_filter, iteration=epoch)
+
                 if not args.relation_evaluation:  # entity prediction evalution
                     if mrr_raw < best_mrr:
                         if epoch >= args.n_epochs:
                             break
                     else:
                         best_mrr = mrr_raw
+                        print("Saving current best model")
                         torch.save({'state_dict': model.state_dict(), 'epoch': epoch}, model_state_file)
+                        StorageManager.upload_file(model_state_file, os.path.join("s3://experiment-logging/storage",model_state_file))
                 else:
                     if mrr_raw_r < best_mrr:
                         if epoch >= args.n_epochs:
                             break
                     else:
                         best_mrr = mrr_raw_r
+                        print("Saving current best model")
                         torch.save({'state_dict': model.state_dict(), 'epoch': epoch}, model_state_file)
-        mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r = test(model, 
-                                                            train_list+valid_list,
-                                                            test_list, 
-                                                            num_rels, 
-                                                            num_nodes, 
-                                                            use_cuda, 
-                                                            all_ans_list_test, 
-                                                            all_ans_list_r_test, 
-                                                            model_state_file, 
-                                                            static_graph, 
-                                                            mode="test")
+                        StorageManager.upload_file(model_state_file, os.path.join("s3://experiment-logging/storage",model_state_file))
+        mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r, output_list = test(model, 
+                                                                        train_list+valid_list,
+                                                                        test_list, 
+                                                                        num_rels, 
+                                                                        num_nodes, 
+                                                                        use_cuda, 
+                                                                        all_ans_list_test, 
+                                                                        all_ans_list_r_test, 
+                                                                        model_state_file, 
+                                                                        static_graph, 
+                                                                        mode="test")
     
-    StorageManager.upload_file(model_state_file, os.path.join("s3://experiment-logging/storage",model_state_file))
+    # StorageManager.upload_file(model_state_file, os.path.join("s3://experiment-logging/storage",model_state_file))
 
-    return mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r
+    return mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r, output_list
 
 
 if __name__ == '__main__':
@@ -372,7 +397,7 @@ if __name__ == '__main__':
                         help="do relation prediction")
 
     # configuration for stat training
-    parser.add_argument("--n-epochs", type=int, default=10,
+    parser.add_argument("--n-epochs", type=int, default=150,
                         help="number of minimum training epochs on each time step") #default: 500
     parser.add_argument("--lr", type=float, default=0.001,
                         help="learning rate")
@@ -380,7 +405,7 @@ if __name__ == '__main__':
                         help="norm to clip gradient to")
 
     # configuration for evaluating
-    parser.add_argument("--evaluate-every", type=int, default=20,
+    parser.add_argument("--evaluate-every", type=int, default=1,
                         help="perform evaluation every n epochs")
 
     # configuration for decoder
@@ -414,8 +439,9 @@ if __name__ == '__main__':
     #Clearml Stuff
     Task.add_requirements("-rrequirements.txt")
     remote_path = "s3://experiment-logging"
-    task = Task.init(project_name='re-gcn', task_name='re-gcn',
+    task = Task.init(project_name='re-gcn', task_name='re-gcn-relation-prediction',
                     output_uri=os.path.join(remote_path, "storage"))
+    logger = task.get_logger()
     task.set_base_docker("nvcr.io/nvidia/pytorch:20.08-py3")
     # task.set_base_docker("nvidia/cuda:11.4.0-cudnn8-devel-ubuntu20.04")
     task.execute_remotely(queue_name="compute", exit_process=True)
@@ -423,6 +449,7 @@ if __name__ == '__main__':
     import dgl
     import numpy as np
     import torch
+    import json
     from tqdm import tqdm
     import random
     sys.path.append("..")
@@ -478,7 +505,14 @@ if __name__ == '__main__':
                 o_f.write("Hits (raw) @ {}: {:.6f}\n".format(hit, avg_count.item()))
     # single run
     else:
-        run_experiment(args)
+        mrr_raw, mrr_filter, mrr_raw_r, mrr_filter_r, output_list = run_experiment(args)
+        output_dict = {}
+        for i,item in enumerate(output_list):
+            output_dict[str(i)] = item.tolist()
+        with open("regcn-output.json",'w') as fp:
+            json.dump(output_dict,fp)
+        task.upload_artifact(name='regcn-output', artifact_object="regcn-output.json")
+    
     sys.exit()
 
 

@@ -188,17 +188,19 @@ class RGCNLinkDataset(object):
 
 
     def load(self, load_time=True):
-        entity_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="entity2id.txt").get_local_copy(),"entity2id.txt")
-        relation_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="relation2id.txt").get_local_copy(),"relation2id.txt")
-        train_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="train.txt").get_local_copy(),"train.txt")
-        valid_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="valid.txt").get_local_copy(),"valid.txt")
-        test_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt", dataset_name="test.txt").get_local_copy(),"test.txt")
-        print(entity_path)
-        # entity_path = os.path.join(self.dir, 'entity2id.txt')
-        # relation_path = os.path.join(self.dir, 'relation2id.txt')
-        # train_path = os.path.join(self.dir, 'train.txt')
-        # valid_path = os.path.join(self.dir, 'valid.txt')
-        # test_path = os.path.join(self.dir, 'test.txt')
+        ds = Dataset.get(dataset_project='datasets/gdelt', dataset_name='gdelt_2020_temporal_clusters_train_split')
+        ds_path = ds.get_mutable_local_copy("./data")
+        # entity_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt_ops", dataset_name="entity2id.txt").get_local_copy(),"entity2id.txt")
+        # relation_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt_ops", dataset_name="relation2id.txt").get_local_copy(),"relation2id.txt")
+        # train_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt_ops", dataset_name="train.txt").get_local_copy(),"train.txt")
+        # valid_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt_ops", dataset_name="valid.txt").get_local_copy(),"valid.txt")
+        # test_path = os.path.join(Dataset.get(dataset_project="datasets/gdelt_ops", dataset_name="test.txt").get_local_copy(),"test.txt")
+        # print(entity_path)
+        entity_path = os.path.join(ds_path, 'entity2id.txt')
+        relation_path = os.path.join(ds_path, 'relation2id.txt')
+        train_path = os.path.join(ds_path, 'train.txt')
+        valid_path = os.path.join(ds_path, 'valid.txt')
+        test_path = os.path.join(ds_path, 'test.txt')
         entity_dict = _read_dictionary(entity_path)
         relation_dict = _read_dictionary(relation_path)
         self.train = np.array(_read_triplets_as_list(train_path, entity_dict, relation_dict, load_time))
@@ -535,6 +537,9 @@ def _read_dictionary(filename):
     with open(filename, 'r+') as f:
         for line in f:
             line = line.strip().split('\t')
+            if len(line)<=1:
+                continue
+            print(line)
             d[int(line[1])] = line[0]
     return d
 

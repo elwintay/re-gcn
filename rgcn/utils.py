@@ -19,7 +19,8 @@ import ipdb
 #
 #######################################################################
 
-def sort_and_rank(score, target): 
+def sort_and_rank(score, target):
+    # print(score.shape) 
     _, indices = torch.sort(score, dim=1, descending=True) #sort all the horizontal scores
     indices = torch.nonzero(indices == target.view(-1, 1)) # Get true false 2d matrix of corresponding score position and target
     indices = indices[:, 1].view(-1)
@@ -139,7 +140,10 @@ def build_sub_graph(num_nodes, num_rels, triples, use_cuda, gpu):
 
 def get_total_rank(test_triples, score, all_ans, eval_bz, rel_predict=0):
     num_triples = len(test_triples)
+    # print("eval_bz: {}".format(eval_bz))
+    # print("num_triples: {}".format(num_triples))
     n_batch = (num_triples + eval_bz - 1) // eval_bz
+    # print("n_batch: {}".format(n_batch) )
     rank = []
     filter_rank = []
     for idx in range(n_batch):
@@ -372,6 +376,8 @@ def load_data(dataset, bfs_level=3, relabel=False):
 def construct_snap(test_triples, num_nodes, num_rels, final_score, topK):
     sorted_score, indices = torch.sort(final_score, dim=1, descending=True)
     top_indices = indices[:, :topK]
+    print("entity")
+    print(top_indices)
     predict_triples = []
     for _ in range(len(test_triples)):
         for index in top_indices[_]:
@@ -388,6 +394,8 @@ def construct_snap(test_triples, num_nodes, num_rels, final_score, topK):
 def construct_snap_r(test_triples, num_nodes, num_rels, final_score, topK):
     sorted_score, indices = torch.sort(final_score, dim=1, descending=True)
     top_indices = indices[:, :topK]
+    print("relation")
+    print(top_indices)
     predict_triples = []
     # for _ in range(len(test_triples)):
     #     h, r = test_triples[_][0], test_triples[_][1]
